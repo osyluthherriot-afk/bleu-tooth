@@ -8,6 +8,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 import {
   parseBogsyResult,
+  isBogsy,
   greatWeaponFighting,
   savageAttacker,
   tavernBrawler,
@@ -103,6 +104,4 @@ async function fetchAndParse(interaction) {
   return parsed;
 }
 
-function isBogsy(content) {
-  return /\d+d\d+\s*\{/.test(content) && content.includes('✨');
-}
+

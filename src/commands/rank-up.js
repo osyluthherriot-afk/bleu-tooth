@@ -4,7 +4,7 @@
  * Rank ladder: d4 → d6 → d8 → d10 → d12 → d20 → d100
  */
 import { SlashCommandBuilder } from 'discord.js';
-import { parseBogsyResult, rankUpReroll, formatResult } from '../bogsyParser.js';
+import { parseBogsyResult, isBogsy, rankUpReroll, formatResult } from '../bogsyParser.js';
 
 export const data = new SlashCommandBuilder()
   .setName('rankup')
@@ -54,6 +54,4 @@ export async function execute(interaction) {
   );
 }
 
-function isBogsy(content) {
-  return /\d+d\d+\s*\{/.test(content) && content.includes('✨');
-}
+

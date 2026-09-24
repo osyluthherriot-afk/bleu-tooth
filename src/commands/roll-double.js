@@ -3,7 +3,7 @@
  * Reply to a Bogsy message and double all die rolls.
  */
 import { SlashCommandBuilder } from 'discord.js';
-import { parseBogsyResult, doubleRolls, formatResult } from '../bogsyParser.js';
+import { parseBogsyResult, isBogsy, doubleRolls, formatResult } from '../bogsyParser.js';
 
 export const data = new SlashCommandBuilder()
   .setName('double')
@@ -47,6 +47,4 @@ export async function execute(interaction) {
   await interaction.reply(formatResult('🔵 Doubled', parsed.user, result));
 }
 
-function isBogsy(content) {
-  return /\d+d\d+\s*\{/.test(content) && content.includes('✨');
-}
+

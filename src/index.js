@@ -24,6 +24,7 @@ import {
   contextMenuData,
   executeContextMenu,
 } from './commands/context-menus.js';
+import { isBogsy } from './bogsyParser.js';
 
 // ── Client setup ──────────────────────────────────────────────────────────────
 const client = new Client({
@@ -136,11 +137,7 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function isBogsy(content) {
-  return /\d+d\d+\s*\{/.test(content) && content.includes('✨');
-}
 
 async function findAncestorSession(message) {
   let current = message;

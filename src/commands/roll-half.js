@@ -3,7 +3,7 @@
  * Reply to a Bogsy message and halve all die rolls (rounded down, min 1).
  */
 import { SlashCommandBuilder } from 'discord.js';
-import { parseBogsyResult, halfRolls, formatResult } from '../bogsyParser.js';
+import { parseBogsyResult, isBogsy, halfRolls, formatResult } from '../bogsyParser.js';
 
 export const data = new SlashCommandBuilder()
   .setName('half')
@@ -46,6 +46,4 @@ export async function execute(interaction) {
   await interaction.reply(formatResult('🔵 Halved', parsed.user, result));
 }
 
-function isBogsy(content) {
-  return /\d+d\d+\s*\{/.test(content) && content.includes('✨');
-}
+

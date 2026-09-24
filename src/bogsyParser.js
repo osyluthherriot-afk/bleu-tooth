@@ -2,9 +2,11 @@
  * bogsyParser.js
  * Parses and re-rolls dice based on Bogsy bot output format.
  *
- * Bogsy output example:
- *   @Nineveth d20 + 2d10  =   1d20 {10} + 2d10 {5 9} = ✨ 24 ✨
- *   <@123456789> d20 + 2d10  =   1d20 {10} + 2d10 {5 9} = ✨ 24 ✨
+ * Example Bogsy outputs:
+ *   @Nineveth **d20** = **1d20 {9}** = ✨ **9** ✨
+ *   <@318854497334788097> **d20 + 2d10** = **1d20 {10} + 2d10 {5 9}** = ✨ **24** ✨
+ *   @Nineveth d20 = 1d20 {9} = ✨ 9 ✨
+ *   Perception = 1d20 {12} + 4 = ✨ 16 ✨
  */
 
 // ─── Die roller ──────────────────────────────────────────────────────────────
@@ -37,11 +39,16 @@ export function rollDice(count, sides) {
  */
 
 /**
+ * Test whether a text string looks like a Bogsy roll.
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function isBogsy(text) {
+  return parseBogsyResult(text) !== null;
+}
+
+/**
  * Parse a Bogsy output line into a structured result.
- * Strategy:
- *  1. Extract the ✨ total ✨ from the end
- *  2. Extract all NdS {r1 r2 ...} groups from anywhere in the string
- *  3. The user mention is the first token
  *
  * @param {string} text
  * @returns {BogsyResult|null}
@@ -49,49 +56,55 @@ export function rollDice(count, sides) {
 export function parseBogsyResult(text) {
   if (!text) return null;
 
-  // ── 1. Must contain ✨ and at least one die group ──────────────────────────
-  if (!text.includes('✨')) return null;
-  if (!/\d*d\d+\s*\{/.test(text)) return null;
+  // Clean markdown syntax (*, _, ~, `) that Bogsy uses for bolding/strikethrough
+  const clean = text.replace(/[*_~`]/g, '').trim();
 
-  // ── 2. Extract the final total (number between last pair of ✨) ────────────
-  const totalMatch = text.match(/✨\s*(-?\d+)\s*✨\s*$/);
+  // Must contain at least one die notation with brace results, e.g. 1d20 {9} or d20 {9}
+  if (!/\d*d\d+\s*\{[^}]*\}/i.test(clean)) return null;
+
+  // Must have an '=' separating parts
+  if (!clean.includes('=')) return null;
+
+  const sections = clean.split('=');
+  if (sections.length < 2) return null;
+
+  // 1. Extract final total from the last section (after the final '=')
+  const lastSection = sections[sections.length - 1];
+  const totalMatch = lastSection.match(/-?\d+/);
   if (!totalMatch) return null;
-  const total = parseInt(totalMatch[1], 10);
+  const total = parseInt(totalMatch[0], 10);
 
-  // ── 3. Extract user mention (first token: <@id> or @name) ─────────────────
+  // 2. Extract user mention (e.g. <@12345> or @Username)
   const userMatch = text.match(/^(<@!?\d+>|@\S+)/);
   const user = userMatch ? userMatch[1] : '';
 
-  // ── 4. Extract the dice expression (between first token and first "=") ────
-  const exprMatch = text.match(/(?:<@!?\d+>|@\S+)\s+(.+?)\s*=/);
-  const expr = exprMatch ? exprMatch[1].trim() : '';
+  // 3. Extract original expression (before the first '=')
+  const firstSection = sections[0].trim();
+  const expr = firstSection.replace(/^(<@!?\d+>|@\S+)\s*/, '').trim();
 
-  // ── 5. Extract all die groups: NdS {r1 r2 ...} ────────────────────────────
+  // 4. Extract all die groups: NdS {r1 r2 ...}
   const groups = [];
   const dieGroupRe = /(\d*)d(\d+)\s*\{([^}]*)\}/gi;
   let m;
-  while ((m = dieGroupRe.exec(text)) !== null) {
+  while ((m = dieGroupRe.exec(clean)) !== null) {
     const count = parseInt(m[1] || '1', 10);
     const sides = parseInt(m[2], 10);
     const rolls = m[3]
       .trim()
       .split(/\s+/)
-      .map(Number)
-      .filter((n) => !isNaN(n) && n > 0);
-    if (rolls.length > 0) groups.push({ count, sides, rolls });
+      .map((n) => parseInt(n.replace(/\D/g, ''), 10))
+      .filter((n) => !isNaN(n));
+    if (rolls.length > 0) {
+      groups.push({ count, sides, rolls });
+    }
   }
 
   if (groups.length === 0) return null;
 
-  // ── 6. Extract flat modifiers ──────────────────────────────────────────────
-  // Look in the section between the first "=" and the last "=" for modifiers
-  // that aren't part of a die group
-  const sections = text.split('=');
+  // 5. Extract flat modifiers from middle sections (e.g. + 5, - 2)
   const modifiers = [];
-  // modifiers appear in the expanded section (between the two = signs)
   if (sections.length >= 3) {
     const expanded = sections.slice(1, -1).join('=');
-    // Remove all die group tokens first, then find loose numbers
     const stripped = expanded.replace(/\d*d\d+\s*\{[^}]*\}/gi, '');
     const modRe = /([+-])\s*(\d+)(?!\s*d)/g;
     let mm;
@@ -222,5 +235,6 @@ export function formatResult(label, user, { groups, modifiers, total }, extra = 
     .join(' ');
   const detail = [groupStr, modStr].filter(Boolean).join(' ');
   const note = extra ? `\n*${extra}*` : '';
-  return `${user} **${label}**\n${detail} = ✨ **${total}** ✨${note}`;
+  const prefix = user ? `${user} ` : '';
+  return `${prefix}**${label}**\n${detail} = ✨ **${total}** ✨${note}`;
 }

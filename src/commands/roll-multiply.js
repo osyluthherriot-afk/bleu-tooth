@@ -4,7 +4,7 @@
  * Supports: +, -, *, /
  */
 import { SlashCommandBuilder } from 'discord.js';
-import { parseBogsyResult, applyOpToTotal, formatResult } from '../bogsyParser.js';
+import { parseBogsyResult, isBogsy, applyOpToTotal, formatResult } from '../bogsyParser.js';
 
 export const data = new SlashCommandBuilder()
   .setName('rollop')
@@ -73,6 +73,4 @@ export async function execute(interaction) {
   );
 }
 
-function isBogsy(content) {
-  return /\d+d\d+\s*\{/.test(content) && content.includes('✨');
-}
+

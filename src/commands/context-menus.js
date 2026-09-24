@@ -42,12 +42,14 @@ export const contextMenuData = [
 // ── Shared parse helper ───────────────────────────────────────────────────────
 
 function getParsed(interaction) {
-  const msg    = interaction.targetMessage;
-  const parsed = parseBogsyResult(msg.content);
-  return parsed;
+  const msg = interaction.targetMessage;
+  const content = msg?.content || msg?.embeds?.[0]?.description || '';
+  return parseBogsyResult(content);
 }
 
 async function failNotBogsy(interaction) {
+  const content = interaction.targetMessage?.content;
+  console.log('[Context Menu] Failed to parse message content:', JSON.stringify(content));
   return interaction.reply({
     content: '❌ That message doesn\'t look like a Bogsy roll. Right-click a Bogsy result message.',
     ephemeral: true,

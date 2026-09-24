@@ -6,7 +6,7 @@
  *   - messageCreate      → Bogsy result replies into active SoD sessions
  */
 import 'dotenv/config';
-import { Client, GatewayIntentBits, Partials, Collection } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, Collection, REST, Routes } from 'discord.js';
 
 // ── Command imports ───────────────────────────────────────────────────────────
 import { data as doubleData,   execute as executeDouble   } from './commands/roll-double.js';
@@ -53,10 +53,33 @@ for (const cmd of commandMap) {
   client.commands.set(cmd.data.name, cmd);
 }
 
+// ── Auto-register slash commands on startup ───────────────────────────────────
+async function registerCommands(clientId, guildId) {
+  const rest = new REST().setToken(process.env.DISCORD_TOKEN);
+  const body = commandMap.map((c) => c.data.toJSON());
+
+  try {
+    if (guildId) {
+      await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body });
+      console.log(`✅ Slash commands registered to guild ${guildId}`);
+    } else {
+      await rest.put(Routes.applicationCommands(clientId), { body });
+      console.log('✅ Slash commands registered globally');
+    }
+  } catch (err) {
+    console.error('❌ Failed to register slash commands:', err);
+  }
+}
+
 // ── Events ────────────────────────────────────────────────────────────────────
 
-client.once('ready', (c) => {
+client.once('ready', async (c) => {
   console.log(`🔵 Bleu the Blue Tooth is online as ${c.user.tag}!`);
+
+  // CLIENT_ID falls back to the bot's own application ID if not set in env
+  const clientId = process.env.CLIENT_ID ?? c.user.id;
+  const guildId  = process.env.GUILD_ID || null;
+  await registerCommands(clientId, guildId);
 });
 
 /** Handle slash command interactions */

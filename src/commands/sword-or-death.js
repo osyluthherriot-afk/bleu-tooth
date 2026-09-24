@@ -11,7 +11,7 @@
  *   - The roll falls below the AC, OR
  *   - The configured limit of rounds is reached.
  */
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { parseBogsyResult } from '../bogsyParser.js';
 
 // In-memory store: sessionId -> SodSession
@@ -68,6 +68,7 @@ const QUOTES = [
 export const data = new SlashCommandBuilder()
   .setName('swordordeath')
   .setDescription('Start a SWORD OR DEATH challenge. Players must keep hitting the AC or fall.')
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addIntegerOption((opt) =>
     opt
       .setName('ac')
@@ -92,6 +93,13 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
+  if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+    return interaction.reply({
+      content: '❌ Only administrators can start Sword or Death.',
+      ephemeral: true,
+    });
+  }
+
   const ac    = interaction.options.getInteger('ac');
   const limit = interaction.options.getInteger('limit') ?? 10;
   const quote = interaction.options.getString('custom_quote')

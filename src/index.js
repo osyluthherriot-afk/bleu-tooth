@@ -27,6 +27,7 @@ import {
   executeContextMenu,
 } from './commands/context-menus.js';
 import { isBogsy } from './bogsyParser.js';
+import { data as trData, execute as executeTr } from './commands/tr.js';
 
 // ── Client setup ──────────────────────────────────────────────────────────────
 const client = new Client({
@@ -50,6 +51,7 @@ const slashCommands = [
   { data: savageData,  execute: executeSavage  },
   { data: brawlerData, execute: executeBrawler },
   { data: sodData,     execute: executeSod     },
+  { data: trData,      execute: executeTr      },
 ];
 
 for (const cmd of slashCommands) {

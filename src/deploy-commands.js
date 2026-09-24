@@ -15,6 +15,8 @@ import { data as rollOpData    } from './commands/roll-multiply.js';
 import { data as rankUpData    } from './commands/rank-up.js';
 import { gwfData, savageData, brawlerData } from './commands/dnd-features.js';
 import { data as sodData       } from './commands/sword-or-death.js';
+import { data as trData        } from './commands/tr.js';
+import { contextMenuData       } from './commands/context-menus.js';
 
 const commands = [
   doubleData,
@@ -25,6 +27,8 @@ const commands = [
   savageData,
   brawlerData,
   sodData,
+  trData,
+  ...contextMenuData,
 ].map((c) => c.toJSON());
 
 const rest = new REST().setToken(process.env.DISCORD_TOKEN);

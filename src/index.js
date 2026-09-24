@@ -18,6 +18,8 @@ import {
   data as sodData,
   execute as executeSod,
   activeSessions,
+  getSessionByMessageId,
+  getSessionByChannel,
   handleSodReply,
 } from './commands/sword-or-death.js';
 import {
@@ -122,37 +124,70 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-/** SoD session tracking via Bogsy reply chain */
+/** SoD session tracking via player replies and Bogsy rolls */
 client.on('messageCreate', async (message) => {
-  if (!message.author.bot) return;
+  // Case 1: Player (non-bot) sends a message
+  if (!message.author.bot) {
+    if (message.reference?.messageId) {
+      const session = getSessionByMessageId(message.reference.messageId);
+      if (session && session.alive) {
+        session.lastTriggerTimestamp = Date.now();
+        session.lastTriggerUser = message.author.id;
+        session.lastTriggerMessageId = message.id;
+        console.log(`[SoD] Player ${message.author.tag} replied to challenge in channel ${message.channelId}`);
+      }
+    }
+    return;
+  }
+
+  // Case 2: Bot message that looks like a Bogsy result
   if (!isBogsy(message.content)) return;
 
-  const sessionId = await findAncestorSession(message);
-  if (!sessionId) return;
+  // Check direct reference if Bogsy replied
+  let session = message.reference?.messageId
+    ? getSessionByMessageId(message.reference.messageId)
+    : null;
+
+  // If Bogsy didn't reply directly, check active session in this channel
+  if (!session) {
+    const channelSession = getSessionByChannel(message.channelId);
+    if (channelSession && channelSession.alive) {
+      const recentlyTriggered =
+        channelSession.lastTriggerTimestamp &&
+        Date.now() - channelSession.lastTriggerTimestamp < 60000;
+
+      let matchedPreceding = false;
+      try {
+        const recentMessages = await message.channel.messages.fetch({ limit: 6 });
+        for (const m of recentMessages.values()) {
+          if (m.id === message.id) continue;
+          if (
+            !m.author.bot &&
+            m.reference?.messageId &&
+            channelSession.messageIds.has(m.reference.messageId)
+          ) {
+            matchedPreceding = true;
+            break;
+          }
+        }
+      } catch (e) {
+        // ignore fetch error
+      }
+
+      if (recentlyTriggered || matchedPreceding) {
+        session = channelSession;
+      }
+    }
+  }
+
+  if (!session) return;
 
   try {
-    await handleSodReply(message, sessionId);
+    await handleSodReply(message, session);
   } catch (err) {
     console.error('Error handling SoD reply:', err);
   }
 });
-
-
-
-async function findAncestorSession(message) {
-  let current = message;
-  for (let depth = 0; depth < 5; depth++) {
-    const ref = current.reference;
-    if (!ref?.messageId) break;
-    if (activeSessions.has(ref.messageId)) return ref.messageId;
-    try {
-      current = await current.channel.messages.fetch(ref.messageId);
-    } catch {
-      break;
-    }
-  }
-  return null;
-}
 
 // ── Login ─────────────────────────────────────────────────────────────────────
 client.login(process.env.DISCORD_TOKEN);

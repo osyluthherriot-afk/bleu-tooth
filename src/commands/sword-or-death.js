@@ -14,8 +14,32 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { parseBogsyResult } from '../bogsyParser.js';
 
-// In-memory store: messageId -> SodSession
+// In-memory store: sessionId -> SodSession
 export const activeSessions = new Map();
+
+/**
+ * Find an active session by any message ID it has posted (initial or round results).
+ * @param {string} messageId
+ * @returns {Object|null}
+ */
+export function getSessionByMessageId(messageId) {
+  for (const session of activeSessions.values()) {
+    if (session.messageIds.has(messageId)) return session;
+  }
+  return null;
+}
+
+/**
+ * Find an active session in a channel.
+ * @param {string} channelId
+ * @returns {Object|null}
+ */
+export function getSessionByChannel(channelId) {
+  for (const session of activeSessions.values()) {
+    if (session.channelId === channelId && session.alive) return session;
+  }
+  return null;
+}
 
 const QUOTES = [
   '"And on the eighth day he asked who had opened the seventh seal."',
@@ -92,30 +116,36 @@ export async function execute(interaction) {
   const reply = await interaction.reply({ embeds: [embed], fetchReply: true });
 
   // Register session keyed on the bot's reply message ID
-  activeSessions.set(reply.id, {
+  const session = {
+    id: reply.id,
+    channelId: interaction.channelId,
+    messageIds: new Set([reply.id]),
     ac,
     limit,
     round: 0,
     history: [],     // { user, roll, beat }
     alive: true,
-  });
+    lastTriggerTimestamp: 0,
+    lastTriggerUser: null,
+  };
+
+  activeSessions.set(reply.id, session);
 }
 
 /**
- * Called by the message listener when a message references an active SoD session.
- * @param {import('discord.js').Message} message – the player's reply
- * @param {string} sessionId                     – the bot message ID the player replied to
+ * Called by the message listener when a Bogsy message matches an active SoD session.
+ * @param {import('discord.js').Message} message – the Bogsy result message
+ * @param {Object|string} sessionOrId            – the session object or session ID
  */
-export async function handleSodReply(message, sessionId) {
-  const session = activeSessions.get(sessionId);
+export async function handleSodReply(message, sessionOrId) {
+  const session = typeof sessionOrId === 'string'
+    ? activeSessions.get(sessionOrId)
+    : sessionOrId;
+
   if (!session || !session.alive) return;
 
   const parsed = parseBogsyResult(message.content);
-
-  if (!parsed) {
-    // Not a Bogsy result yet (e.g. player command)
-    return;
-  }
+  if (!parsed) return;
 
   session.round += 1;
   const beat = parsed.total >= session.ac;
@@ -129,7 +159,7 @@ export async function handleSodReply(message, sessionId) {
 
   if (!beat) {
     session.alive = false;
-    activeSessions.delete(sessionId);
+    activeSessions.delete(session.id);
 
     const embed = new EmbedBuilder()
       .setColor(0xcc0000)
@@ -150,7 +180,7 @@ export async function handleSodReply(message, sessionId) {
 
   if (session.round >= session.limit) {
     session.alive = false;
-    activeSessions.delete(sessionId);
+    activeSessions.delete(session.id);
 
     const embed = new EmbedBuilder()
       .setColor(0x00cc55)
@@ -179,5 +209,9 @@ export async function handleSodReply(message, sessionId) {
     .addFields({ name: 'History', value: progressBar })
     .setFooter({ text: 'Sword or Death | Reply with another Bogsy roll to continue' });
 
-  return message.reply({ embeds: [embed] });
+  const replyMsg = await message.reply({ embeds: [embed] });
+  session.messageIds.add(replyMsg.id);
+  session.lastTriggerTimestamp = 0;
+  session.lastTriggerUser = null;
+  return replyMsg;
 }

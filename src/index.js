@@ -139,8 +139,29 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-/** SoD session tracking via player replies and Bogsy rolls */
+const BOGSY_USER_ID = '812347275698634762';
+
+/** Message handler: Bogsy auto-delete & SoD tracking */
 client.on('messageCreate', async (message) => {
+  // ── Auto-delete Bogsy message if it mentions Bleu ──────────────────────────
+  if (message.author.id === BOGSY_USER_ID) {
+    const mentionsBleu =
+      message.mentions?.users?.has(client.user.id) ||
+      message.content?.includes(client.user.id) ||
+      (client.user?.username &&
+        message.content?.toLowerCase().includes(`@${client.user.username.toLowerCase()}`));
+
+    if (mentionsBleu) {
+      try {
+        await message.delete();
+        console.log(`[Auto-Delete] Deleted Bogsy message (${message.id}) mentioning Bleu.`);
+      } catch (err) {
+        console.error('Failed to delete Bogsy message (ensure Bleu has Manage Messages permission):', err.message);
+      }
+      return;
+    }
+  }
+
   // Case 1: Player (non-bot) sends a message
   if (!message.author.bot) {
     if (message.reference?.messageId) {

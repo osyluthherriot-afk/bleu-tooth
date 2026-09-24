@@ -1,9 +1,5 @@
 /**
  * index.js — Bleu the Blue Tooth, entry point
- *
- * Registers commands and listens for:
- *   - interactionCreate  → slash commands
- *   - messageCreate      → Bogsy result replies into active SoD sessions
  */
 import 'dotenv/config';
 import { Client, GatewayIntentBits, Partials, Collection, REST, Routes } from 'discord.js';
@@ -24,6 +20,10 @@ import {
   activeSessions,
   handleSodReply,
 } from './commands/sword-or-death.js';
+import {
+  contextMenuData,
+  executeContextMenu,
+} from './commands/context-menus.js';
 
 // ── Client setup ──────────────────────────────────────────────────────────────
 const client = new Client({
@@ -35,10 +35,10 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel],
 });
 
-// ── Command registry ──────────────────────────────────────────────────────────
+// ── Slash command registry ────────────────────────────────────────────────────
 client.commands = new Collection();
 
-const commandMap = [
+const slashCommands = [
   { data: doubleData,  execute: executeDouble  },
   { data: halfData,    execute: executeHalf    },
   { data: rollOpData,  execute: executeRollOp  },
@@ -49,25 +49,32 @@ const commandMap = [
   { data: sodData,     execute: executeSod     },
 ];
 
-for (const cmd of commandMap) {
+for (const cmd of slashCommands) {
   client.commands.set(cmd.data.name, cmd);
 }
 
-// ── Auto-register slash commands on startup ───────────────────────────────────
+// Context menu command names
+const contextMenuNames = new Set(contextMenuData.map((c) => c.name));
+
+// ── Auto-register all commands on startup ─────────────────────────────────────
 async function registerCommands(clientId, guildId) {
   const rest = new REST().setToken(process.env.DISCORD_TOKEN);
-  const body = commandMap.map((c) => c.data.toJSON());
+
+  const body = [
+    ...slashCommands.map((c) => c.data.toJSON()),
+    ...contextMenuData.map((c) => c.toJSON()),
+  ];
 
   try {
     if (guildId) {
       await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body });
-      console.log(`✅ Slash commands registered to guild ${guildId}`);
+      console.log(`✅ Commands registered to guild ${guildId}`);
     } else {
       await rest.put(Routes.applicationCommands(clientId), { body });
-      console.log('✅ Slash commands registered globally');
+      console.log('✅ Commands registered globally');
     }
   } catch (err) {
-    console.error('❌ Failed to register slash commands:', err);
+    console.error('❌ Failed to register commands:', err);
   }
 }
 
@@ -75,15 +82,27 @@ async function registerCommands(clientId, guildId) {
 
 client.once('ready', async (c) => {
   console.log(`🔵 Bleu the Blue Tooth is online as ${c.user.tag}!`);
-
-  // CLIENT_ID falls back to the bot's own application ID if not set in env
   const clientId = process.env.CLIENT_ID ?? c.user.id;
   const guildId  = process.env.GUILD_ID || null;
   await registerCommands(clientId, guildId);
 });
 
-/** Handle slash command interactions */
+/** Handle slash commands AND context menu interactions */
 client.on('interactionCreate', async (interaction) => {
+  // ── Context menu (right-click message → Apps) ──────────────────────────────
+  if (interaction.isMessageContextMenuCommand()) {
+    if (!contextMenuNames.has(interaction.commandName)) return;
+    try {
+      await executeContextMenu(interaction);
+    } catch (err) {
+      console.error(`Context menu error [${interaction.commandName}]:`, err);
+      const msg = { content: '❌ Something went wrong.', ephemeral: true };
+      interaction.replied ? interaction.followUp(msg) : interaction.reply(msg);
+    }
+    return;
+  }
+
+  // ── Slash commands ─────────────────────────────────────────────────────────
   if (!interaction.isChatInputCommand()) return;
 
   const cmd = client.commands.get(interaction.commandName);
@@ -102,24 +121,11 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-/**
- * Handle regular messages for Sword or Death session tracking.
- *
- * Bogsy is a bot. When a player replies to Bleu's SoD challenge message,
- * Bogsy also replies. We intercept Bogsy's reply (which is a reply to the
- * player's message, in the same reply chain) and compare to the session.
- *
- * Strategy:
- *  1. If a message is a bot message AND is a Bogsy-format result:
- *     Walk up its reply chain to find if any ancestor is a SoD session message.
- *  2. If yes, handle as a SoD round.
- */
+/** SoD session tracking via Bogsy reply chain */
 client.on('messageCreate', async (message) => {
-  // Only care about bot messages that look like Bogsy results
   if (!message.author.bot) return;
   if (!isBogsy(message.content)) return;
 
-  // Check if this is a reply in an active SoD chain
   const sessionId = await findAncestorSession(message);
   if (!sessionId) return;
 
@@ -136,21 +142,12 @@ function isBogsy(content) {
   return /\d+d\d+\s*\{/.test(content) && content.includes('✨');
 }
 
-/**
- * Walk up the reply chain up to 5 levels to find a SoD session message ID.
- * @param {import('discord.js').Message} message
- * @returns {Promise<string|null>}
- */
 async function findAncestorSession(message) {
   let current = message;
   for (let depth = 0; depth < 5; depth++) {
     const ref = current.reference;
     if (!ref?.messageId) break;
-
-    // Direct hit
     if (activeSessions.has(ref.messageId)) return ref.messageId;
-
-    // Fetch parent and keep walking
     try {
       current = await current.channel.messages.fetch(ref.messageId);
     } catch {

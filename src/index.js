@@ -25,6 +25,7 @@ import {
 import {
   contextMenuData,
   executeContextMenu,
+  handleModalSubmit,
 } from './commands/context-menus.js';
 import { isBogsy } from './bogsyParser.js';
 import { data as trData, execute as executeTr } from './commands/tr.js';
@@ -101,6 +102,18 @@ client.on('interactionCreate', async (interaction) => {
       await executeContextMenu(interaction);
     } catch (err) {
       console.error(`Context menu error [${interaction.commandName}]:`, err);
+      const msg = { content: '❌ Something went wrong.', ephemeral: true };
+      interaction.replied ? interaction.followUp(msg) : interaction.reply(msg);
+    }
+    return;
+  }
+
+  // ── Modal submissions (e.g. Math Operation) ────────────────────────────────
+  if (interaction.isModalSubmit()) {
+    try {
+      await handleModalSubmit(interaction);
+    } catch (err) {
+      console.error('Modal submit error:', err);
       const msg = { content: '❌ Something went wrong.', ephemeral: true };
       interaction.replied ? interaction.followUp(msg) : interaction.reply(msg);
     }

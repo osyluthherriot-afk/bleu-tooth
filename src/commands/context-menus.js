@@ -7,6 +7,10 @@
 import {
   ContextMenuCommandBuilder,
   ApplicationCommandType,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ActionRowBuilder,
 } from 'discord.js';
 import {
   parseBogsyResult,
@@ -31,6 +35,7 @@ function msgMenu(name) {
 // ── Exported command definitions ──────────────────────────────────────────────
 
 export const contextMenuData = [
+  msgMenu('🔵 Math Operation'),
   msgMenu('🔵 Double Roll'),
   msgMenu('🔵 Half Roll'),
   msgMenu('🔵 Rank Up & Re-roll'),
@@ -63,6 +68,23 @@ export async function executeContextMenu(interaction) {
   const parsed = getParsed(interaction);
 
   if (!parsed) return failNotBogsy(interaction);
+
+  // ── Modal for Math Operation (RollOp) ──────────────────────────────────────
+  if (name === '🔵 Math Operation') {
+    const modal = new ModalBuilder()
+      .setCustomId(`rollop_modal_${interaction.targetMessage.id}`)
+      .setTitle('Apply Math to Roll');
+
+    const input = new TextInputBuilder()
+      .setCustomId('math_input')
+      .setLabel('Operation & Number (e.g. +5, *2, /4)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('+5, -3, *2, /4')
+      .setRequired(true);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return interaction.showModal(modal);
+  }
 
   switch (name) {
     case '🔵 Double Roll': {
@@ -110,4 +132,54 @@ export async function executeContextMenu(interaction) {
     default:
       return interaction.reply({ content: '❌ Unknown context menu action.', ephemeral: true });
   }
+}
+
+// ── Modal submit handler for Math Operation ───────────────────────────────────
+
+export async function handleModalSubmit(interaction) {
+  if (!interaction.customId.startsWith('rollop_modal_')) return;
+
+  const targetMessageId = interaction.customId.replace('rollop_modal_', '');
+  let targetMsg;
+  try {
+    targetMsg = await interaction.channel.messages.fetch(targetMessageId);
+  } catch (err) {
+    return interaction.reply({
+      content: '❌ Could not find the original Bogsy message.',
+      ephemeral: true,
+    });
+  }
+
+  const content = targetMsg?.content || targetMsg?.embeds?.[0]?.description || '';
+  const parsed = parseBogsyResult(content);
+  if (!parsed) {
+    return interaction.reply({
+      content: '❌ Could not parse the Bogsy roll.',
+      ephemeral: true,
+    });
+  }
+
+  const rawInput = interaction.fields.getTextInputValue('math_input').trim();
+  const match = rawInput.match(/^([+\-*/xX])\s*(\d+(?:\.\d+)?)$/);
+  if (!match) {
+    return interaction.reply({
+      content: '❌ Invalid format. Please enter an operation and number like `+5`, `-3`, `*2`, or `/4`.',
+      ephemeral: true,
+    });
+  }
+
+  let op = match[1];
+  if (op.toLowerCase() === 'x') op = '*';
+  const value = parseFloat(match[2]);
+
+  const newTotal = applyOpToTotal(parsed.total, op, value);
+  const opLabel = `${op} ${value}`;
+
+  return interaction.reply(
+    formatResult(
+      `🔵 Roll ${opLabel}`,
+      parsed.user,
+      { groups: parsed.groups, modifiers: parsed.modifiers, total: newTotal }
+    )
+  );
 }

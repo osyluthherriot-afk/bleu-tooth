@@ -1,0 +1,19 @@
+{
+  "name": "bleu-the-blue-tooth",
+  "version": "1.0.0",
+  "description": "Bleu the Blue Tooth — a Discord bot companion for the Bogsy Dice Roll bot",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "deploy": "node src/deploy-commands.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
